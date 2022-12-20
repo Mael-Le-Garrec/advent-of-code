@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::io::{prelude::*, BufReader};
 use std::env::args;
 
+mod main2;
+
 fn print_map(map: &Vec<Vec<u32>>)
 {
     for line in map.iter() {
@@ -51,11 +53,10 @@ fn main() -> std::io::Result<()> {
     // Create a map of visibility: 1 = visible, 0 = non visible
     println!("\nVisibility Map:");
     let mut map_visibility = create_empty_map(map.len(), map[0].len());
-    print_map(&map_visibility);
 
     // Check in all 4 directions if the tree can be seen
     // From left to right
-    let mut latest_biggest_tree: u32 = 0;
+    let mut latest_biggest_tree: u32;
     for (i, line) in map.iter().enumerate() {
         latest_biggest_tree = map[i][0];
         for (j, _tree) in line.iter().enumerate(){
