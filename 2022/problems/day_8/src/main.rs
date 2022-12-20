@@ -55,17 +55,14 @@ fn main() -> std::io::Result<()> {
 
     // Check in all 4 directions if the tree can be seen
     // From left to right
+    let mut latest_biggest_tree: u32 = 0;
     for (i, line) in map.iter().enumerate() {
+        latest_biggest_tree = map[i][0];
         for (j, _tree) in line.iter().enumerate(){
             if j > 0 {
-                if map[i][j] > map[i][j-1] {
+                if map[i][j] > latest_biggest_tree {
                     map_visibility[i][j] = 1;
-                }
-                else if map[i][j] == map[i][j-1]{
-                    continue;
-                }
-                else {
-                    break;
+                    latest_biggest_tree = map[i][j];
                 }
             }
         }
@@ -73,17 +70,13 @@ fn main() -> std::io::Result<()> {
 
     // From right to left
     for (i, line) in map.iter().enumerate() {
+        latest_biggest_tree = line[map[0].len() - 1];
         for (j, _tree) in line.iter().enumerate(){
             let maxlen = map[0].len() - 1;
             if maxlen - j <= map[0].len()-2 {
-                if map[i][maxlen-j] > map[i][maxlen-j+1] {
+                if map[i][maxlen-j] > latest_biggest_tree {
                     map_visibility[i][maxlen-j] = 1;
-                }
-                else if map[i][maxlen-j] == map[i][maxlen-j+1]{
-                    continue;
-                }
-                else {
-                    break;
+                    latest_biggest_tree = map[i][maxlen-j];
                 }
             }
         }
@@ -91,16 +84,12 @@ fn main() -> std::io::Result<()> {
 
     // From top to bottom
     for j in 0..map[0].len(){
+        latest_biggest_tree = map[0][j];
         for i in 0..map.len() {
             if i > 0 {
-                if map[i][j] > map[i-1][j]{
+                if map[i][j] > latest_biggest_tree {
                     map_visibility[i][j] = 1;
-                }
-                else if map[i][j] == map[i-1][j]{
-                    continue;
-                }
-                else {
-                    break;
+                    latest_biggest_tree = map[i][j];
                 }
             }
         }
@@ -108,17 +97,13 @@ fn main() -> std::io::Result<()> {
 
     // From bottom to top
     for j in 0..map[0].len(){
+        latest_biggest_tree = map[map.len()-1][j];
         for i in 0..map.len() {
             let maxlen = map.len() - 1;
             if maxlen - i <= map.len()-2 {
-                if map[maxlen-i][j] > map[maxlen-i+1][j]{
+                if map[maxlen-i][j] > latest_biggest_tree {
                     map_visibility[maxlen-i][j] = 1;
-                }
-                else if map[maxlen-i][j] == map[maxlen-i+1][j]{
-                    continue;
-                }
-                else {
-                    break;
+                    latest_biggest_tree = map[maxlen-i][j];
                 }
             }
         }
