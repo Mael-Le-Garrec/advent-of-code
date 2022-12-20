@@ -26,21 +26,13 @@ fn move_knots(knots: &mut Vec<(i32, i32)>) {
             return;
         }
         let difference = (knots[i-1].0 - knots[i].0, knots[i-1].1 - knots[i].1);
+        let max_dist: f64 = 2.0; // √(0**2 + 2**2)
         match difference {
             // If the head is 1 step away, do nothing
-            (0, 0) => (),
-            (1, 1) => (),
-            (1, 0) => (),
-            (0, 1) => (),
-            (-1, 1) => (),
-            (-1, 0) => (),
-            (0, -1) => (),
-            (-1, -1) => (),
-            (1, -1) => (),
-
-            (x, y) if (x == 0 && y == 0) => {
-                println!("what?");
-                panic!();
+            // Check the geometric distance, needs to be lower than √(0**2 + 2**2), which is the
+            // minimum distance a knot can be at, without being next to the current one
+            (x, y) if (f64::from((x).pow(2) + (y).pow(2))).sqrt() < max_dist => {  // We're right nex to it
+                ();
             }
 
             // Otherwise, move it
