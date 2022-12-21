@@ -1,5 +1,7 @@
 extern crate array_tool;
 extern crate partial_application;
+extern crate num_bigint;
+extern crate num_traits;
 
 use std::fs::File;
 #[allow(unused_imports)]
@@ -7,6 +9,11 @@ use std::collections::HashMap;
 use std::io::{prelude::*, BufReader};
 use std::env::args;
 use partial_application::partial;
+use num_bigint::BigUint;
+use num_traits::{Zero, One};
+
+// Chose the part of the problem to solve: 1, or 2
+static PROBLEM: u32 = 2;
 
 enum CurrentStep {
     Monkey,
@@ -17,20 +24,10 @@ enum CurrentStep {
     False,
 }
 
-fn square_old(x: i32) -> i32 {
-    return x * x;
-}
-
-fn add_old(x: i32) -> i32 {
-    return x * x;
-}
-
-fn add_value(x: i32, y: i32) -> i32 {
-    return x + y;
-}
-
-fn multiply_value(x: i32, y: i32) -> i32 {
-    return x * y;
+enum Operation {
+    Square,
+    Multiplication,
+    Addition,
 }
 
 fn main() -> std::io::Result<()> {
@@ -47,11 +44,13 @@ fn main() -> std::io::Result<()> {
 
     // Store the worry level of the items taken by the monkeys
     // Monkey0: [item1, item2, ...], ...
-    let mut worry_level: Vec<Vec<u32>> = Vec::new();
+    let mut worry_level: Vec<Vec<BigUint>> = Vec::new();
 
     // Each monkey has an operation to perform on the worry level
     // Let's store the functions here
-    let mut operations: Vec<Box<dyn Fn(i32) -> i32>> = Vec::new();
+    let mut operations_: Vec<Operation> = Vec::new();
+    let mut operations_values: Vec<u32> = Vec::new();
+    let mut mod_all: u32 = 1;  // to reduce a number, it needs to be divisible by all monkeys
 
     // Each monkey also has a test to perform after applying the operation
     // Those tests are always a modulo, we'll only store the number
@@ -62,7 +61,7 @@ fn main() -> std::io::Result<()> {
     let mut throw_false: Vec<usize> = Vec::new();
 
     // Store the number of times a monkey has inspected an intem
-    let mut number_inspections: Vec<u32> = Vec::new();
+    let mut number_inspections: Vec<u64> = Vec::new();
 
     // Read the input
     // store the current step of the input reading: monkey, items, operation, test, true, false
@@ -86,8 +85,11 @@ fn main() -> std::io::Result<()> {
                 // Add each item to the created vector
                 let items_str = &sp[2..];
                 for item in items_str {
+                    let value: u32 = item.split(',').nth(0).unwrap().parse().unwrap();
+                    let big_value: BigUint = BigUint::new(vec![value]);
+
                     worry_level[current_monkey-1].push(
-                        item.split(',').nth(0).unwrap().parse::<u32>().unwrap()
+                        big_value
                     );
                 }
                 println!("  Items: {:?}", worry_level[current_monkey-1]);
@@ -102,23 +104,21 @@ fn main() -> std::io::Result<()> {
                 match (operator, number){
                     ("*", "old") => {
                         // Given the old number, square it
-                        operations.push(Box::new(square_old));
-                    },
-                    ("+", "old") => {
-                        operations.push(Box::new(add_old));
+                        operations_.push(Operation::Square);
+                        operations_values.push(0);
                     },
                     ("*", x_str) => {
-                        let x: i32 = x_str.parse().unwrap();
-                        // Create a partial function that already multiplies the number here
-                        let partial_mul = partial!(move multiply_value => x, _);
-                        operations.push(Box::new(partial_mul));
+                        let x: u32  = x_str.parse().unwrap();
+                        operations_.push(Operation::Multiplication);
+                        operations_values.push(x);
+
                     },
                     ("+", x_str) => {
-                        let x: i32 = x_str.parse().unwrap();
-                        let partial_add = partial!(move add_value  => x, _);
-                        operations.push(Box::new(partial_add));
+                        let x: u32 = x_str.parse().unwrap();
+                        operations_.push(Operation::Addition);
+                        operations_values.push(x);
                     },
-                    (&_, _) => {},
+                    (&_, _) => { panic!("Operation not found") },
                 }
                 println!("  Operation: {} {}", operator, number);
 
@@ -127,6 +127,7 @@ fn main() -> std::io::Result<()> {
             CurrentStep::Test => {
                 let number= sp[3].parse::<u32>().unwrap();
                 test.push(number);
+                mod_all = mod_all * number;
                 println!("  Modulo {}", test[test.len()-1]);
 
                 current_step = CurrentStep::True;
@@ -151,21 +152,40 @@ fn main() -> std::io::Result<()> {
     // Now start the rounds!
     println!("\nStarting rounds");
     // Each monkey is going to inspect all of its items, and then throw them to another monkey
-    let number_rounds = 20;
+    let number_rounds = 10_000;
     for i in 0..number_rounds {
         for monkey in 0..worry_level.len() {  // iterate over the number of monkeys
             for _ in 0..worry_level[monkey].len() { // iterate over the worry levels
                 // always take the first one as we're going to remove it later
-                let worry = worry_level[monkey][0] as i32;
-                let mut result: i32 = operations[monkey](worry);
-                result = result / 3; // relief -> divide by 3 the result
+                let worry = &worry_level[monkey][0];
+
+                let mut result: BigUint = Zero::zero();
+                match operations_[monkey] {
+                    Operation::Square => {
+                        result = worry * worry;
+                    },
+                    Operation::Multiplication => {
+                        result = worry * operations_values[monkey];
+                    },
+                    Operation::Addition => {
+                        result = worry + operations_values[monkey];
+                    }
+                    _ => {},
+                }
+
+                if PROBLEM == 1 {
+                    result = result / (3 as u32); // relief -> divide by 3 the result
+                }
+                else if PROBLEM == 2 {
+                    result = result % mod_all;
+                }
 
                 // Throw the item with a new worry of `result` to the other monkey
-                if result % (test[monkey] as i32) == 0 {
-                    worry_level[throw_true[monkey]].push(result as u32);
+                if &result % (test[monkey]) == Zero::zero() {
+                    worry_level[throw_true[monkey]].push(result);
                 }
                 else{
-                    worry_level[throw_false[monkey]].push(result as u32);
+                    worry_level[throw_false[monkey]].push(result);
                 }
 
                 // Remove the thrown element
@@ -176,10 +196,11 @@ fn main() -> std::io::Result<()> {
             }
         }
         // Let's print what each monkey holds now
-        println!("\nEnd of round {i}");
-        for monkey in 0..worry_level.len() {  // iterate over the number of monkeys
-            println!("Monkey {}: {:?}", monkey, worry_level[monkey]);
-        }
+        //println!("\nEnd of round {i}");
+        //for monkey in 0..worry_level.len() {  // iterate over the number of monkeys
+        //    println!("Monkey {}: {:?}", monkey, worry_level[monkey]);
+        //}
+        println!("Round {} / {}", i, number_rounds);
     }
 
     println!("\nInspection results:");
@@ -188,7 +209,7 @@ fn main() -> std::io::Result<()> {
     }
 
     let nb_monkey_business = 2; // Number of monkeys to take to calculate the business
-    let mut max_times: Vec<u32> = vec![];
+    let mut max_times: Vec<u64> = vec![];
     for _ in 0..nb_monkey_business {
         let max_ = number_inspections.iter().max().unwrap();
         max_times.push(*max_);
@@ -199,9 +220,9 @@ fn main() -> std::io::Result<()> {
     }
 
     // Finally compute the monkey business
-    let mut monkey_business = 1;
+    let mut monkey_business: u64 = 1;
     for inspections in max_times.iter() {
-        monkey_business = monkey_business * inspections;
+        monkey_business = monkey_business * (inspections);
     }
     println!("\nMonkey business: {}", monkey_business);
 
