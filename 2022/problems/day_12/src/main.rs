@@ -3,6 +3,8 @@ extern crate petgraph;
 extern crate log;
 
 
+use std::cmp::min;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
 use std::env::args;
@@ -77,6 +79,9 @@ fn main() -> std::io::Result<()> {
     let mut start_node_idx: (usize, usize) = (0, 0);
     let mut end_node_idx: (usize, usize) = (0, 0);
 
+    // For problem 2, store all the starting points 'a'
+    let mut vec_start: Vec<(usize, usize)> = Vec::new();
+
     // Read the input
     for (i, l) in reader.lines().enumerate() {
         let line = l?;
@@ -86,9 +91,13 @@ fn main() -> std::io::Result<()> {
         for (j, chr) in line.chars().enumerate() {
             if chr == 'S' {
                 start_node_idx = (i, j);
+                vec_start.push((i, j));
             }
             else if chr == 'E' {
                 end_node_idx = (i, j);
+            }
+            else if chr == 'a' {
+                vec_start.push((i, j));
             }
             let node = Node { character: chr };
             line_nodes.push(graph.add_node(node));
@@ -120,25 +129,47 @@ fn main() -> std::io::Result<()> {
         }
     }
 
+    let PROBLEM = 2;
 
     // Get the shortest path to the end
     // Set the weight for all edges to 1 to compute the number of step
-    let res = dijkstra(&graph,
-                                graph_nodes[start_node_idx.0][start_node_idx.1],
-                                 None,
-                            |_| 1
-    );
+    let mut res = HashMap::<NodeIndex, i32>::new();
+    if PROBLEM == 1 {
+        res = dijkstra(&graph,
+                                    graph_nodes[start_node_idx.0][start_node_idx.1],
+                                    None,
+                                |_| 1
+        );
+
+        let value = res.get(&graph_nodes[end_node_idx.0][end_node_idx.1]);
+        match value {
+            Some(steps) => { println!("Number of steps from start to finish: {}", steps) },
+            None => { println!("Could not find a path to the end :(") },
+        }
+    }
+    else {
+        let mut min_steps = i32::MAX;
+        for (i, j) in vec_start.iter() {
+            println!("{i}, {j}");
+            res = dijkstra(&graph,
+                                        graph_nodes[*i][*j],
+                                        None,
+                                    |_| 1
+            );
+            let value = res.get(&graph_nodes[end_node_idx.0][end_node_idx.1]);
+            match value {
+                Some(steps) => { if steps < &min_steps {min_steps = *steps; } },
+                None => { println!("Could not find a path to the end :(") },
+            }
+        }
+        println!("Number of steps from start to finish: {}", min_steps);
+    }
+
 
     //dbg!(&graph_nodes);
     //dbg!(start_node_idx);
     //dbg!(&graph_nodes[end_node_idx.0][end_node_idx.1]);
     //dbg!(&graph_nodes[start_node_idx.0][start_node_idx.1]);
-
-    let value = res.get(&graph_nodes[end_node_idx.0][end_node_idx.1]);
-    match value {
-        Some(steps) => { println!("Number of steps from start to finish: {}", steps) },
-        None => { println!("Could not find a path to the end :(") },
-    }
 
     // Write teh full graph to "graph.dot" to be plotted via
     // dot -Tpng graph.dot graph.png
