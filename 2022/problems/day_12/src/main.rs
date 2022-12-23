@@ -1,24 +1,62 @@
 extern crate array_tool;
 extern crate petgraph;
+extern crate log;
+
 
 use std::fs::File;
-use std::collections::HashMap;
 use std::io::{prelude::*, BufReader};
 use std::env::args;
 
 use petgraph::Graph;
+use petgraph::dot::{Dot, Config};
 use petgraph::algo::dijkstra;
 use petgraph::prelude::*;
 
+#[allow(unused_imports)]
+use log::{debug, error, warn, log_enabled, info, Level};
+
 #[derive(Debug,Default)]
 struct Node {
-    x: usize,  // position on the map
-    y: usize,
     character: char, // initial character
-    elevation: i32, // character translated to elevation
+}
+
+impl Node {
+    fn get_elevation(&self) -> i32 {
+        if self.character == 'E' {
+            ('z' as u32 - 'a' as u32) as i32
+        }
+        else if self.character == 'S' {
+            ('a' as u32 - 'a' as u32) as i32
+        }
+        else {
+            (self.character as u32 - 'a' as u32) as i32
+        }
+    }
+}
+
+fn add_edge(
+    graph: &mut Graph<Node, i32, petgraph::Directed>, 
+    graph_nodes: &Vec<Vec<NodeIndex>>, 
+    i: usize, 
+    j: usize,
+    next_i: usize,
+    next_j: usize,
+    jump_limit: i32)
+    {
+    let current_elevation = graph.node_weight(graph_nodes[i][j]).unwrap().get_elevation();
+    let next_elevation = graph.node_weight(graph_nodes[next_i][next_j]).unwrap().get_elevation();
+
+    // We can only climb +1 but we can descend more
+    let difference = next_elevation - current_elevation;
+    if difference <= jump_limit {
+        debug!("Adding edge from {i},{j} to {next_i},{next_j}");
+        graph.add_edge(graph_nodes[i][j], graph_nodes[next_i][next_j], difference);
+    }
 }
 
 fn main() -> std::io::Result<()> {
+    env_logger::init();
+
     // Read the arguments
     let input: &str;
     match args().nth(1) {
@@ -31,7 +69,8 @@ fn main() -> std::io::Result<()> {
     let reader = BufReader::new(file);
 
     // Create the graph that will be used to get the shortest path
-    let mut graph : Graph<Node, i32, petgraph::Undirected> = Graph::new_undirected();
+    // The graph is directed because we can climb only +1 but downclimb infinitely
+    let mut graph : Graph<Node, i32, petgraph::Directed> = Graph::new();
     // Also store the created nodes to retrieve them easier
     let mut graph_nodes: Vec<Vec<NodeIndex>> = vec![];
 
@@ -45,16 +84,13 @@ fn main() -> std::io::Result<()> {
 
         let mut line_nodes: Vec<NodeIndex> = vec![];
         for (j, chr) in line.chars().enumerate() {
-            let mut elevation = (chr as i32) - ('a' as i32);
             if chr == 'S' {
-                elevation = 0;
                 start_node_idx = (i, j);
             }
             else if chr == 'E' {
-                elevation = 25;
                 end_node_idx = (i, j);
             }
-            let node = Node { x: i, y: j, character: chr, elevation };
+            let node = Node { character: chr };
             line_nodes.push(graph.add_node(node));
         }
         graph_nodes.push(line_nodes);
@@ -65,48 +101,32 @@ fn main() -> std::io::Result<()> {
     let jump_limit = 1; // Can only move if the difference is one
     for i in 0..graph_nodes.len() {
         for j in 0..graph_nodes[0].len() {
-            let current_elevation = graph.node_weight(graph_nodes[i][j]).unwrap().elevation;
-
             // Right neighbor
-            if j < graph_nodes[i].len() - 1 {
-                let next_node = graph.node_weight(graph_nodes[i][j+1]).unwrap();
-                let difference = (current_elevation - next_node.elevation).abs();
-                if difference <= jump_limit {
-                    graph.add_edge(graph_nodes[i][j], graph_nodes[i][j+1], difference);
-                }
+            if j < graph_nodes[i].len()-1 {
+                add_edge(&mut graph, &graph_nodes, i, j, i, j+1, jump_limit);
             }
             // Left neighbor
             if j > 0 {
-                let next_node = graph.node_weight_mut(graph_nodes[i][j-1]).unwrap();
-                let difference = (current_elevation - next_node.elevation).abs();
-                if difference <= jump_limit {
-                    graph.add_edge(graph_nodes[i][j], graph_nodes[i][j-1], difference);
-                }
+                add_edge(&mut graph, &graph_nodes, i, j, i, j-1, jump_limit);
             }
             // Up neighbor
             if i > 0 {
-                let next_node = graph.node_weight(graph_nodes[i-1][j]).unwrap();
-                let difference = (current_elevation - next_node.elevation).abs();
-                if difference <= jump_limit {
-                    graph.add_edge(graph_nodes[i][j], graph_nodes[i-1][j], difference);
-                }
+                add_edge(&mut graph, &graph_nodes, i, j, i-1, j, jump_limit);
             }
             // Down neighbor
             if i < graph_nodes.len()-1 {
-                let next_node = graph.node_weight(graph_nodes[i+1][j]).unwrap();
-                let difference = (current_elevation - next_node.elevation).abs();
-                if difference <= jump_limit {
-                    graph.add_edge(graph_nodes[i][j], graph_nodes[i+1][j], difference);
-                }
+                add_edge(&mut graph, &graph_nodes, i, j, i+1, j, jump_limit);
             }
         }
     }
 
 
+    // Get the shortest path to the end
+    // Set the weight for all edges to 1 to compute the number of step
     let res = dijkstra(&graph,
-                              graph_nodes[start_node_idx.0][start_node_idx.1],
-                              Some(graph_nodes[end_node_idx.0][end_node_idx.1]),
-                                    |x | 1
+                                graph_nodes[start_node_idx.0][start_node_idx.1],
+                                 None,
+                            |_| 1
     );
 
     //dbg!(&graph_nodes);
@@ -114,10 +134,23 @@ fn main() -> std::io::Result<()> {
     //dbg!(&graph_nodes[end_node_idx.0][end_node_idx.1]);
     //dbg!(&graph_nodes[start_node_idx.0][start_node_idx.1]);
 
-    let value = res[&graph_nodes[end_node_idx.0][end_node_idx.1]];
+    let value = res.get(&graph_nodes[end_node_idx.0][end_node_idx.1]);
+    match value {
+        Some(steps) => { println!("Number of steps from start to finish: {}", steps) },
+        None => { println!("Could not find a path to the end :(") },
+    }
 
-    println!("Number of steps from start to finish: {}", value);
+    // Write teh full graph to "graph.dot" to be plotted via
+    // dot -Tpng graph.dot graph.png
+    let mut file = File::create("graph.dot")?;
+    let result = Dot::with_config(&graph, &[Config::EdgeNoLabel]);
+
+    match write!(file, "{:?}", result)
+    {
+        Ok(_) => println!("Wrote graph to graph.dot"),
+        Err(_) => ()
+    };
+
 
     Ok(())
 }
-
